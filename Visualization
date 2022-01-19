@@ -1,0 +1,244 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed May 19 23:12:30 2021
+
+@author: MyPC
+"""
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import matplotlib as mpl
+import seaborn as sns
+import shap
+import datetime 
+
+import os
+
+#Change the link
+os.chdir("D:\Study\VNP")
+
+#Plot data
+#ttracker
+q = pd.read_csv("DataThesis3/qtracker1.csv")
+m = pd.read_csv("DataThesis3/mtracker.csv")
+w = pd.read_csv("DataThesis3/wtracker1.csv")
+
+#Shapley values
+wpad = pd.read_csv("DataThesis3/wpadshapley.csv")
+mpad = pd.read_csv("DataThesis3/mshapley.csv")
+qpad = pd.read_csv("DataThesis3/qshapley.csv")
+
+#Variables
+wv = pd.read_csv("DataThesis3/qweekly.csv")
+mv = pd.read_csv("DataThesis3/qmonthly.csv")
+qv = pd.read_csv("DataThesis3/qquarterly.csv")
+growth = pd.read_csv("DataThesis3/train.csv")[["date", "countries", "growth"]]
+
+#Set Datetime
+q["date"] = pd.DatetimeIndex(q["date"])
+m["date"] = pd.DatetimeIndex(m["date"], dayfirst=True)
+w["date"] = pd.DatetimeIndex(w["date"])
+w = w[w["date"]<"2021-12"]
+
+wpad["date"] = pd.DatetimeIndex(wpad["date"], dayfirst=True)
+mpad["date"] = pd.DatetimeIndex(mpad["date"], dayfirst=True)
+qpad["date"] = pd.DatetimeIndex(qpad["date"])
+
+
+wv["date"] = pd.DatetimeIndex(wv["date"], dayfirst=True)
+mv["date"] = pd.DatetimeIndex(mv["date"], dayfirst=True)
+qv["date"] = pd.DatetimeIndex(qv["date"])
+growth["date"] = pd.DatetimeIndex(growth["date"])
+
+# Plot growth rate
+x_start_growth = datetime.datetime(2021, 7, 1)
+x_start_tracker = datetime.datetime(2021,11,14)
+x_end_growth = datetime.datetime(2022,1,1)
+x_end_tracker = datetime.datetime(2021,12,1)
+
+def growthplot(time,d, x_start, x_end):
+    # growth["date"] = growth.set_index("date").to_period("Q").reset_index()
+    g = d.loc[(d["date"]>time)]
+    g.columns = ["date", "countries", "growth"]
+    g = g.sort_values("date", ascending=False, ignore_index=True)
+    hl = ["CN", "KR", "TW", "VN"]
+    COLOR_SCALE = ["red", "orange", "blue", "green"]
+    ghl = g.loc[(g["countries"].isin(hl))]
+    plt.style.use('ggplot')
+    for i in g["countries"].unique():
+        data = g.loc[(g["countries"])==i]
+        plt.plot(data["date"], data["growth"], c="#BEBEBE", lw=0.8)
+    LABEL_Y = [5.2,3, 0, -6]
+    for idx, group in enumerate(ghl["countries"].unique()):
+        data = ghl[ghl["countries"] == group]
+        print(data)
+        color = COLOR_SCALE[idx]
+        plt.plot(data["date"], data["growth"], color=color, lw=1.2,)
+        text = data["countries"].values[0]
+        y_start = data["growth"].values[0]
+        y_end = LABEL_Y[idx]
+        plt.plot(
+        [x_start, x_end],
+        [y_start,y_end],
+        color=color, 
+        alpha=0.5, 
+        ls="dashed"
+        )
+        
+        plt.text(
+            x_end, 
+            y_end, 
+            text, 
+            color=color, 
+            fontsize=14, 
+            weight="bold", 
+            fontfamily="Montserrat", 
+            va="center"
+        )
+    plt.rcParams["figure.figsize"] = (10,8)
+    return plt.show()
+        
+growthplot("2018", growth, x_start_growth, x_end_growth)
+growthplot("2021-03", w, x_start_tracker, x_end_tracker)
+        
+    
+#Plot monthly data
+def qplotgraph(country, time):
+    qn = growth.loc[(growth["date"]>time)].loc[(growth["countries"]==country)]
+    mn = m.loc[(m["date"]>time)].loc[(m["countries"]==country)]
+    plt.style.use('ggplot')
+    plt.plot(qn["date"], qn["growth"], color = 'blue',  marker='o', label="GDP")
+    plt.plot(mn["date"], mn["tracker"], color = 'green', marker='^', label="Tracker")
+    plt.legend()
+    plt.rcParams["figure.figsize"] = (15,3)
+    plt.title(country)
+    return plt.show()
+    
+for c in q["countries"].drop_duplicates().values.tolist():
+    qplotgraph(c, "2010")
+    
+#Plot weekly data
+
+def wplotgraph(country, time):
+    qn = growth.loc[(growth["date"]>time)].loc[(growth["countries"]==country)]
+    wn = w.loc[(w["date"]>time)].loc[(w["countries"]==country)]
+    plt.style.use('ggplot')
+    plt.rcParams["figure.figsize"] = (15,3)
+    sns.lineplot(data=wn, x="date", y="tracker", color = 'red', marker='o', label="Tracker")
+    plt.plot(qn["date"], qn["growth"], color = 'blue', linewidth=0.5, marker='o', markersize=10, label="GDP")
+    plt.legend()
+    plt.title(country)
+    return plt.show()
+
+for c in  w["countries"].drop_duplicates().values.tolist():
+    wplotgraph(c, "2020-03")
+    
+#Change period
+q = q.set_index("date").to_period("Q").reset_index()
+qv = qv.set_index("date").to_period("Q").reset_index()
+qpad = qpad.set_index("date").to_period("Q").reset_index()
+m = m.set_index("date").to_period("M").reset_index()
+mv = mv.set_index("date").to_period("M").reset_index()
+mpad = mpad.set_index("date").to_period("M").reset_index()
+
+
+#Scatter data
+def scattergraph(time):
+    n = q.loc[(q["date"]==time)]
+    g = growth[growth["date"]==time]
+    plt.style.use('ggplot')
+    plt.scatter(g["countries"], g["growth"], color='g', label="GDP")
+    plt.scatter(n["countries"], n["tracker"], color='b', marker="^", label = "Trends Tracker")
+    plt.legend()
+    plt.rcParams["figure.figsize"] = (10,3)
+    plt.title(time)
+    return plt.show()
+
+scattergraph("2021Q2")
+
+def scattergraphQ3(time):
+    n = q.loc[(q["date"]==time)]
+    g = growth[growth["date"]==time]
+    n = n[n["countries"].isin(["CN", "KR", "TW", "VN"])]
+    g = g[g["countries"].isin(["CN", "KR", "TW", "VN"])]
+    plt.style.use('ggplot')
+    plt.scatter(g["countries"], g["growth"], color='g', label="GDP")
+    plt.scatter(n["countries"], n["tracker"], color='b', marker="^", label = "Trends Tracker")
+    plt.legend()
+    plt.rcParams["figure.figsize"] = (10,3)
+    plt.title(time)
+    return plt.show()
+
+scattergraphQ3("2021Q3")
+
+#Group variables
+wpad = wpad.sort_values("date", ignore_index=True)
+wv = wv.sort_values("date", ignore_index=True)
+
+Economic_Anxiety = ['United States housing bubble', 'Deed in lieu of foreclosure', 'Bureau of the Fiscal Service', 'Fuel Economy & Gas Prices', 'Government', "2010 United States foreclosure crisis", "economic crisis", "Crisis 1", "1997 Asian financial crisis", 'National debt of the United States', 'Government debt', "Crisis hotline", "Crisis 2", "Recession", 'Gingival recession', 'Force', "Financial crisis", "Gingival recession", "Coronavirus recession", "Global recession", "Stock market crash", 'Insurance','Mergers, Acquisitions, and Other Restructuring Activities: An Integrated Approach to Process, Tools, Cases, and Solutions', 'Foreclosure', "Unemployment", "Unemployment benefits","Unemployment", "Natural rate of unemployment", "Unemployment benefits in Texas", "Unemployment benefits in France", "A World Without Work: Technology, Automation, and How We Should Respond", "Unemployment insurance in Japan", 'Bankruptcy', 'Personal bankruptcy', 'Bankruptcy proceedings', 'Bankruptcy']
+Health_Condition = ['Strength training', 'Pharmaceuticals & Biotech', 'Unwanted Body & Facial Hair Remova', 'Medical Facilities & Services', 'Mental Health', 'Hospitals & Treatment Centers', "Doctors' Offices", 'Health Insurance', 'Pharmacy']
+Consumption_Services = ['Entertainment Media','Abandoned pets', 'Chapter 7, Title 11, United States Code', 'Online banking', 'Alcoholic Beverages', 'Boats & Watercraft' , 'Fire & Security Services','Emergency Services', 'Restaurants', 'Entertainment Industry', 'Performing Arts', 'Birthday', 'Social Services', 'Travel', 'Sports', 'Autos & Vehicles', 'Home & Garden', 'Events & Listings', 'Vehicle Licensing & Registration', 'Home Appliances', 'Home Furnishings', 'Footwear', 'Hotels & Accommodations', 'Travel Agencies & Services', 'Apparel', 'Legal Services', 'Education']
+Consumption_Goods = ['Consumer Electronics', 'Gifts & Special Event Items', 'Hand luggage', 'Bag tag', 'Baggage', 'Luxury Goods', 'Food & Drink', 'Vehicle Brands', 'Birthday card', 'Shopping', 'Tobacco Products', 'Grocery & Food Retailers', 'Veterinarians', 'Computers & Electronics']
+Labour_Market = ['Civil service entrance examination', 'Job interview', 'Job', 'Temporary Solutions', 'Employment agency', 'Recruitment', 'Military recruitment', 'Recruitment advertising', 'Recruitment & Staffing',  'Developer Jobs', 'Job Search', 'Jobs']
+Housing_Construction = ['Building Materials & Supplies', 'Real Estate Agencies', 'Real Estate', 'Affordable Housing 2','Affordable Housing 1', 'House price index', 'Home Improvement', 'Construction Consulting & Contract', 'Civil Engineering', 'Construction & Maintenance']
+Finance = ['The Poor Had No Lawyers: Who Owns Scotland and How They Got it', 'Professional & Trade Associations', 'Investment', "investment", 'Return on investment', 'Investment fund' , 'Finance', "Mortgage loan",'Student loan', 'Credit & Lending', 'Loan', 'Interest', 'Interest rate', 'Mortgage law', 'Mortgage calculator', 'Fixed-rate mortgage',  'Auto Financing', 'College Financing', 'Home Financing',  "loan", "Loanword", "Student Loan Fund"]
+Business_Services = ['Retail Trade','Rail Transport', 'Office Space', 'Maritime Transport', 'Computer Hardware', 'Advertising & Marketing', 'Architecture', 'Business Services', 'Printing & Publishing', 'Distribution & Logistics', 'Export', 'Import & Export', 'commercial building', 'Commercial Lending', 'Internet & Telecom', 'Office Supplies', 'Programming']
+Industrial = ['Agricultural Equipment', 'Industrial Materials & Equipment', 'Aquaculture', 'Forestry', 'Agriculture & Forestry', 'Aviation', 'Chemicals Industry', 'Food Production', 'Freight & Trucking', 'Transportation & Logistics', 'Mail & Package Delivery']
+
+variables = [Economic_Anxiety, Health_Condition, Consumption_Services, Consumption_Goods, Labour_Market, Housing_Construction, Finance, Business_Services, Industrial]
+cols = ["Economic_Anxiety", "Health_Condition", "Consumption_Services", "Consumption_Goods", "Labour_Market", "Housing_Construction", "Finance", "Business_Services", "Industrial"]
+df = wpad[["date", "countries"]]
+dv = wv[["date", "countries"]]
+dqf = qpad[["date", "countries"]]
+dqv = qv[["date", "countries"]]
+for i in range(len(cols)):
+    df[cols[i]] = wpad[variables[i]].sum(axis=1)
+    dv[cols[i]] = wv[variables[i]].sum(axis=1)
+    dqf[cols[i]] = qpad[variables[i]].sum(axis=1)
+    dqv[cols[i]] = qv[variables[i]].sum(axis=1)
+    
+df = df.loc[(df["date"]>"2021-07")]
+dv = dv.loc[(dv["date"]>"2021-07")]
+
+asiaf = df.groupby("date").sum().reset_index()
+asiav = dv.groupby("date").sum().reset_index()
+asiaf["countries"] = "all"
+asiav["countries"] = "all" 
+df = df.append(asiaf, ignore_index=True)
+dv = dv.append(asiav, ignore_index=True)
+#SHAP value bar
+
+def scattergrapht(time):
+    n = dqf.loc[(dqf["date"]==time)]
+    v = dqv.loc[(dqv["date"]==time)]
+    plt.style.use('ggplot')
+    fig1=n.plot(x="countries", kind="bar", stacked=True, colormap = "tab20c")
+    fig1.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    plt.title(time + " (Shapley values)")
+    fig2=v.plot(x="countries", kind="bar", stacked=True, colormap = "tab20c")
+    fig2.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    plt.title(time + " (Variables values)")
+    return plt.show()
+scattergrapht("2021Q2")
+
+def scattergraphc(country):
+    n = df.loc[(df["countries"]==country)][df["date"]<"2021-11-14"]
+    v = dv.loc[(dv["countries"]==country)][dv["date"]<"2021-11-14"]
+    n["date"] = n["date"].dt.strftime('%m/%d/%Y')
+    v["date"] = v["date"].dt.strftime('%m/%d/%Y')
+    plt.style.use('ggplot')
+    plt.rcParams["figure.figsize"] = (15,5)
+    fig=n.plot(x="date", kind="bar", stacked=True, colormap = "tab20c")
+    fig.legend(loc='upper center', bbox_to_anchor=(0.5, -0.3),ncol = 4)
+    plt.xticks(rotation=90, ha='right')
+    plt.title(country)
+
+    return plt.show()
+
+for c in df["countries"].drop_duplicates().values.tolist():
+    scattergraphc(c)
+
+
+
