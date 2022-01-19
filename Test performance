@@ -1,0 +1,79 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sun May 23 16:43:20 2021
+
+@author: MyPC
+"""
+
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+import seaborn as sns
+from sklearn.metrics import mean_squared_error
+from math import sqrt
+from statsmodels.tsa.ar_model import AutoReg
+import os
+
+#Change the link
+os.chdir("D:\Study\VNP")
+
+#Import data
+df = pd.read_csv("DataThesis3/qtracker.csv")
+df["date"] = pd.to_datetime(df["date"])
+df = df.set_index("date").to_period("Q").sort_index()
+
+def RMSEs(country, timein, timeout):
+    
+    X=df.loc[(df["countries"]==country)].drop(["tracker", "countries"], axis=1).sort_index()
+    model = AutoReg(X, 4)
+    model_fit = model.fit()
+    predictions = model_fit.predict()
+    
+    X['predictions']=predictions
+    X["tracker"] = df.loc[(df["countries"]==country)]["tracker"].values
+    X = X[timein:timeout].dropna()
+    
+    
+    Ra = sqrt(mean_squared_error(X["growth"], X["predictions"]))
+    
+    try:
+        Rk = mean_squared_error(X["growth"], X["tracker"])
+        un = sqrt(Rk)
+    except:
+        Rk = np.nan
+        un = np.nan
+
+    try:
+        st = un/np.std(X["growth"])
+    except:
+        st = np.nan
+    
+    re = un/Ra
+    return [un, st, re]
+
+alltime = []
+mid = []
+latest = []    
+for i in df["countries"].drop_duplicates().values.tolist():
+        alltime.append(RMSEs(i, "2005Q1", "2021Q3"))
+        mid.append(RMSEs(i, "2008Q4", "2010Q4"))
+        latest.append(RMSEs(i, "2020Q1", "2021Q3"))
+
+alltime = pd.DataFrame(alltime)
+mid = pd.DataFrame(mid)
+latest = pd.DataFrame(latest)
+
+alltime.index=df["countries"].drop_duplicates().values.tolist()
+mid.index=df["countries"].drop_duplicates().values.tolist()
+latest.index=df["countries"].drop_duplicates().values.tolist()
+
+alltime.columns=["Unadjusted", "Standardised", "Relative to AR(4)"]
+mid.columns = ["Unadjusted", "Standardised", "Relative to AR(4)"]
+latest.columns = ["Unadjusted", "Standardised", "Relative to AR(4)"]
+
+alltime=alltime.reset_index()
+mid=mid.reset_index()
+latest = latest.reset_index()
+
