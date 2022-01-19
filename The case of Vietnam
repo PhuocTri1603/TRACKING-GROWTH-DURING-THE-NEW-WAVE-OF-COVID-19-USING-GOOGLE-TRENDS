@@ -1,0 +1,148 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Dec  7 21:19:33 2021
+
+@author: MyPC
+"""
+ 
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import matplotlib
+import seaborn as sns
+import shap
+import datetime
+from matplotlib import gridspec
+
+import os
+
+#Change the link
+os.chdir("D:\Study\VNP")
+
+#Plot data
+#ttracker
+q = pd.read_csv("DataThesis3/qtracker.csv")
+m = pd.read_csv("DataThesis3/mtracker.csv") 
+w = pd.read_csv("DataThesis3/wtracker1.csv")
+
+#Shapley values
+wpad = pd.read_csv("DataThesis3/wpadshapley.csv")
+mpad = pd.read_csv("DataThesis3/mshapley.csv")
+qpad = pd.read_csv("DataThesis3/qshapley.csv")
+
+#Variables
+wv = pd.read_csv("DataThesis3/qweekly.csv")
+mv = pd.read_csv("DataThesis3/qmonthly.csv")
+qv = pd.read_csv("DataThesis3/qquarterly.csv")
+growth = pd.read_csv("DataThesis3/train.csv")[["date", "countries", "growth"]]
+covid = pd.read_excel("DataThesis3/VietnamCovid.xlsx").dropna()
+
+#Set Datetime
+q["date"] = pd.DatetimeIndex(q["date"])
+m["date"] = pd.DatetimeIndex(m["date"], dayfirst=True)
+w["date"] = pd.DatetimeIndex(w["date"], dayfirst=True)
+w = w[w["date"]<"2021-12"]
+covid["date"] = pd.DatetimeIndex(covid["date"])
+covid = covid[covid["date"]<"2021-12"]
+covid = covid.set_index("date")
+covid = covid.resample("W").mean()
+covid = np.log(covid).diff(1)
+covid = covid.reset_index()
+
+
+wpad["date"] = pd.DatetimeIndex(wpad["date"], dayfirst=True)
+mpad["date"] = pd.DatetimeIndex(mpad["date"], dayfirst=True)
+qpad["date"] = pd.DatetimeIndex(qpad["date"])
+
+
+wv["date"] = pd.DatetimeIndex(wv["date"], dayfirst=True)
+mv["date"] = pd.DatetimeIndex(mv["date"], dayfirst=True)
+qv["date"] = pd.DatetimeIndex(qv["date"])
+growth["date"] = pd.DatetimeIndex(growth["date"])
+
+wpad = wpad.sort_values("date", ignore_index=True)
+wv = wv.sort_values("date", ignore_index=True)
+w = w.sort_values("date", ignore_index=True)
+
+def wplotgraph(country, time):
+    wn = w[(w["date"]>time)][(w["countries"]==country)]
+    n = np.array(wn["tracker"])
+    c = covid[covid["date"]>time]
+    c = c.set_index("date")
+    # c = c.resample("W").mean()
+    # c = np.log(c).diff(1)
+    c = c[c.index <"2021-11-21"]
+    # c = c[c.index >"2021-05-02"]
+    print(c)
+    print(wn)
+    t = c.reset_index()
+    c = c.transpose()
+    line = [4,20.5]
+    fig, (ax1, ax2) = plt.subplots(2,1,figsize=(16,12), sharex=True)  
+    fig.subplots_adjust(wspace=0, hspace=0)
+    plt.style.use('default')
+    ax1.plot(n, color = 'green', marker='o', label="Tracker")
+    ax1.fill_between(line, y1=25, color="#FAEBD7")
+    ax1.set_ylim(0,25)
+    ax1.set_ylabel("Weekly Tracker", fontsize=20, rotation=90)
+    l, b, wi, h = ax1.get_position().bounds
+    ax1.set_position([l,0.4,wi,h])
+    ax2.imshow(c)
+    ax2.set_xticks(np.arange(len(wn["date"])))
+    ax2.set_yticks(np.arange(len(c.index)))
+    ax2.set_yticklabels(c.index, fontsize=14)
+    ax2.set_xticklabels(t["date"].dt.strftime('%m/%d/%Y'), rotation=90)
+    plt.colorbar(ax2.imshow(c, cmap="Wistia"), pad=0.23, orientation="horizontal")
+    return plt.show()
+
+#Group variables
+Economic_Anxiety = ['United States housing bubble', 'Deed in lieu of foreclosure', 'Bureau of the Fiscal Service', 'Fuel Economy & Gas Prices', 'Government', "2010 United States foreclosure crisis", "economic crisis", "Crisis 1", "1997 Asian financial crisis", 'National debt of the United States', 'Government debt', "Crisis hotline", "Crisis 2", "Recession", 'Gingival recession', 'Force', "Financial crisis", "Gingival recession", "Coronavirus recession", "Global recession", "Stock market crash", 'Insurance','Mergers, Acquisitions, and Other Restructuring Activities: An Integrated Approach to Process, Tools, Cases, and Solutions', 'Foreclosure', "Unemployment", "Unemployment benefits","Unemployment", "Natural rate of unemployment", "Unemployment benefits in Texas", "Unemployment benefits in France", "A World Without Work: Technology, Automation, and How We Should Respond", "Unemployment insurance in Japan", 'Bankruptcy', 'Personal bankruptcy', 'Bankruptcy proceedings', 'Bankruptcy']
+Health_Condition = ['Strength training', 'Pharmaceuticals & Biotech', 'Unwanted Body & Facial Hair Remova', 'Medical Facilities & Services', 'Mental Health', 'Hospitals & Treatment Centers', "Doctors' Offices", 'Health Insurance', 'Pharmacy']
+Consumption_Services = ['Entertainment Media','Abandoned pets', 'Chapter 7, Title 11, United States Code', 'Online banking', 'Alcoholic Beverages', 'Boats & Watercraft' , 'Fire & Security Services','Emergency Services', 'Restaurants', 'Entertainment Industry', 'Performing Arts', 'Birthday', 'Social Services', 'Travel', 'Sports', 'Autos & Vehicles', 'Home & Garden', 'Events & Listings', 'Vehicle Licensing & Registration', 'Home Appliances', 'Home Furnishings', 'Footwear', 'Hotels & Accommodations', 'Travel Agencies & Services', 'Apparel', 'Legal Services', 'Education']
+Consumption_Goods = ['Consumer Electronics', 'Gifts & Special Event Items', 'Hand luggage', 'Bag tag', 'Baggage', 'Luxury Goods', 'Food & Drink', 'Vehicle Brands', 'Birthday card', 'Shopping', 'Tobacco Products', 'Grocery & Food Retailers', 'Veterinarians', 'Computers & Electronics']
+Labour_Market = ['Civil service entrance examination', 'Job interview', 'Job', 'Temporary Solutions', 'Employment agency', 'Recruitment', 'Military recruitment', 'Recruitment advertising', 'Recruitment & Staffing',  'Developer Jobs', 'Job Search', 'Jobs']
+Housing_Construction = ['Building Materials & Supplies', 'Real Estate Agencies', 'Real Estate', 'Affordable Housing 2','Affordable Housing 1', 'House price index', 'Home Improvement', 'Construction Consulting & Contract', 'Civil Engineering', 'Construction & Maintenance']
+Finance = ['The Poor Had No Lawyers: Who Owns Scotland and How They Got it', 'Professional & Trade Associations', 'Investment', "investment", 'Return on investment', 'Investment fund' , 'Finance', "Mortgage loan",'Student loan', 'Credit & Lending', 'Loan', 'Interest', 'Interest rate', 'Mortgage law', 'Mortgage calculator', 'Fixed-rate mortgage',  'Auto Financing', 'College Financing', 'Home Financing',  "loan", "Loanword", "Student Loan Fund"]
+Business_Services = ['Retail Trade','Rail Transport', 'Office Space', 'Maritime Transport', 'Computer Hardware', 'Advertising & Marketing', 'Architecture', 'Business Services', 'Printing & Publishing', 'Distribution & Logistics', 'Export', 'Import & Export', 'commercial building', 'Commercial Lending', 'Internet & Telecom', 'Office Supplies', 'Programming']
+Industrial = ['Agricultural Equipment', 'Industrial Materials & Equipment', 'Aquaculture', 'Forestry', 'Agriculture & Forestry', 'Aviation', 'Chemicals Industry', 'Food Production', 'Freight & Trucking', 'Transportation & Logistics', 'Mail & Package Delivery']
+
+variables = [Economic_Anxiety, Health_Condition, Consumption_Services, Consumption_Goods, Labour_Market, Housing_Construction, Finance, Business_Services, Industrial]
+cols = ["Economic_Anxiety", "Health_Condition", "Consumption_Services", "Consumption_Goods", "Labour_Market", "Housing_Construction", "Finance", "Business_Services", "Industrial"]
+df = wpad[["date", "countries"]]
+dv = wv[["date", "countries"]]
+dqf = qpad[["date", "countries"]]
+dqv = qv[["date", "countries"]]
+for i in range(len(cols)):
+    df[cols[i]] = wpad[variables[i]].sum(axis=1)
+    dv[cols[i]] = wv[variables[i]].sum(axis=1)
+    dqf[cols[i]] = qpad[variables[i]].sum(axis=1)
+    dqv[cols[i]] = qv[variables[i]].sum(axis=1)
+    
+df = df.loc[(df["date"]>"2021-05")]
+dv = dv.loc[(dv["date"]>"2021-05-02")]
+df = df.loc[(df["date"]<"2021-12")]
+dv = dv.loc[(dv["date"]<"2021-12")]
+
+
+def scattergraphc(country):
+    n = df.loc[(df["countries"]==country)]
+    v = dv.loc[(dv["countries"]==country)]
+    n["date"] = n["date"].dt.strftime('%m/%d/%Y')
+    v["date"] = v["date"].dt.strftime('%m/%d/%Y')
+    plt.style.use('ggplot')
+    plt.rcParams["figure.figsize"] = (15,5)
+    fig=n.plot(x="date", kind="bar", stacked=True, colormap = "tab20c")
+    fig.legend(loc='upper center', bbox_to_anchor=(0.5, -0.3),ncol = 4)
+    plt.xticks(rotation=90, ha='right')
+    plt.title("Shapley value")
+    fig2=v.plot(x="date", kind="bar", stacked=True, colormap = "tab20c")
+    fig2.legend(loc='upper center', bbox_to_anchor=(0.5, -0.3),ncol = 4)
+    plt.rcParams["figure.figsize"] = (15,5)
+    plt.xticks(rotation=90, ha='right')
+    plt.title("Search value index")
+    return plt.show()
+
+wplotgraph("VN", "2021-05-02")
+scattergraphc("VN")
